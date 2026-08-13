@@ -92,6 +92,11 @@ do
   -- Enable faster startup by caching compiled Lua modules
   vim.loader.enable()
 
+  vim.api.nvim_set_hl(0, 'Normal', { bg = 'none' })
+  vim.api.nvim_set_hl(0, 'NormalFloat', { bg = 'none' })
+  vim.api.nvim_set_hl(0, 'SignColumn', { bg = 'none' })
+  vim.api.nvim_set_hl(0, 'EndOfBuffer', { bg = 'none' })
+
   -- Set <space> as the leader key
   -- See `:help mapleader`
   --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
@@ -99,7 +104,7 @@ do
   vim.g.maplocalleader = ' '
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
-  vim.g.have_nerd_font = false
+  vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
   --  See `:help vim.o`
@@ -107,10 +112,10 @@ do
   --  For more options, you can see `:help option-list`
 
   -- Make line numbers default
-  vim.o.number = true
+  -- vim.o.number = true
   -- You can also add relative line numbers, to help with jumping.
   --  Experiment for yourself to see if you like it!
-  -- vim.o.relativenumber = true
+  vim.o.relativenumber = true
 
   -- Enable mouse mode, can be useful for resizing splits for example!
   vim.o.mouse = 'a'
@@ -155,7 +160,7 @@ do
   --  It is very similar to `vim.o` but offers an interface for conveniently interacting with tables.
   --   See `:help lua-options`
   --   and `:help lua-guide-options`
-  vim.o.list = true
+  vim.o.list = false
   vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
 
   -- Preview substitutions live, as you type!
@@ -184,6 +189,7 @@ do
   -- Clear highlights on search when pressing <Esc> in normal mode
   --  See `:help hlsearch`
   vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
+  vim.keymap.set('i', 'jj', '<Esc>')
 
   -- Diagnostic Config & Keymaps
   --  See `:help vim.diagnostic.Opts`
@@ -367,6 +373,10 @@ do
     -- Delay between pressing a key and opening which-key (milliseconds)
     delay = 0,
     icons = { mappings = vim.g.have_nerd_font },
+    border = 'rounded',
+    wo = {
+      winblend = 0,
+    },
     -- Document existing key chains
     spec = {
       { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
@@ -387,13 +397,23 @@ do
   require('tokyonight').setup {
     styles = {
       comments = { italic = false }, -- Disable italics in comments
+      floats = 'transparent', -- Force floats to follow global transparency
+      sidebars = 'transparent',
     },
+    on_highlights = function(hl, c)
+      hl.FloatBorder = { fg = c.blue, bg = 'none' }
+      hl.WhichKeyBorder = { fg = c.blue, bg = 'none' }
+      hl.FloatTitle = { fg = c.cyan, bg = 'none' }
+      hl.WhichKeyTitle = { fg = c.cyan, bg = 'none' }
+    end,
+    transparent = true,
   }
 
   -- Load the colorscheme here.
   -- Like many other themes, this one has different styles, and you could load
   -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-  vim.cmd.colorscheme 'tokyonight-night'
+  -- vim.cmd.colorscheme 'tokyonight-night'
+  vim.cmd.colorscheme 'tokyonight'
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
@@ -488,7 +508,40 @@ do
 
   -- NOTE: You can install multiple plugins at once
   vim.pack.add(telescope_plugins)
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    callback = function()
+      local groups = {
+        'Normal',
+        'NormalFloat',
+        'FloatBorder',
+        'TelescopeNormal',
+        'TelescopeBorder',
+        'TelescopePromptNormal',
+        'TelescopePromptBorder',
+        'TelescopePromptTitle',
+        'TelescopeResultsNormal',
+        'TelescopeResultsBorder',
+        'TelescopeResultsTitle',
+        'TelescopePreviewNormal',
+        'TelescopePreviewBorder',
+        'TelescopePreviewTitle',
+        'TelescopeSelection',
+        'TelescopeMatching',
+        'WhichKey',
+        'WhichKeyGroup',
+        'WhichKeyDesc',
+        'WhichKeySeparator',
+        'WhichKeyFloat',
+        'WhichKeyBorder',
+        'WhichKeyValue',
+      }
+      for _, g in ipairs(groups) do
+        vim.api.nvim_set_hl(0, g, { bg = 'NONE' })
+      end
+    end,
+  })
 
+  vim.cmd 'doautocmd ColorScheme'
   -- See `:help telescope` and `:help telescope.setup()`
   require('telescope').setup {
     -- You can put your default mappings / updates / etc. in here
@@ -692,10 +745,28 @@ do
   --  See `:help lsp-config` for information about keys and how to configure
   ---@type table<string, vim.lsp.Config>
   local servers = {
-    -- clangd = {},
-    -- gopls = {},
-    -- pyright = {},
-    -- rust_analyzer = {},
+    clangd = {},
+    gopls = {},
+    zls = {},
+    pyrefly = {},
+    -- pyright = {
+    --   before_init = function(_, config)
+    --     local cwd = vim.fn.getcwd()
+    --
+    --     local default_venv = cwd .. '/.venv/bin/python'
+    --     if vim.fn.executable(default_venv) == 1 then
+    --       config.settings.python.pythonPath = default_venv
+    --       return
+    --     end
+    --
+    --     if vim.env.VIRTUAL_ENV then config.settings.python.pythonPath = vim.env.VIRTUAL_ENV .. '/bin/python' end
+    --   end,
+    --   settings = {
+    --     ---@type table<string, any>
+    --     python = {},
+    --   },
+    -- },
+    rust_analyzer = {},
     --
     -- Some languages (like typescript) have entire language plugins that can be useful:
     --    https://github.com/pmizio/typescript-tools.nvim
@@ -733,6 +804,8 @@ do
       settings = {
         Lua = {
           format = { enable = false }, -- Disable formatting (formatting is done by stylua)
+          workspace = { checkThirdParty = false },
+          diagnostics = { globals = { 'vim' } },
         },
       },
     },
@@ -834,6 +907,7 @@ do
   vim.pack.add { { src = gh 'saghen/blink.cmp', version = vim.version.range '1.*' } }
   require('blink.cmp').setup {
     keymap = {
+
       -- 'default' (recommended) for mappings similar to built-in completions
       --   <c-y> to accept ([y]es) the completion.
       --    This will auto-import if your LSP supports it.
@@ -855,8 +929,21 @@ do
       -- <c-k>: Toggle signature help
       --
       -- See `:help blink-cmp-config-keymap` for defining your own keymap
-      preset = 'default',
+      preset = 'none',
 
+      ['<CR>'] = { 'accept', 'fallback' }, -- Enter підтверджує вибір
+      ['<C-j>'] = { 'select_next', 'fallback' }, -- Ctrl+j вниз по списку
+      ['<C-k>'] = { 'select_prev', 'fallback' }, -- Ctrl+k вгору по списку
+
+      -- Додаткові корисні комбінації для стабільної роботи:
+      ['<C-space>'] = { 'show', 'show_documentation', 'hide_documentation' },
+      ['<C-e>'] = { 'hide', 'fallback' },
+      ['<C-b>'] = { 'scroll_documentation_up', 'fallback' },
+      ['<C-f>'] = { 'scroll_documentation_down', 'fallback' },
+
+      -- Навігація по сніпетах (Tab / Shift+Tab)
+      ['<Tab>'] = { 'snippet_forward', 'fallback' },
+      ['<S-Tab>'] = { 'snippet_backward', 'fallback' },
       -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
       --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
     },
@@ -969,17 +1056,17 @@ do
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-  -- require 'kickstart.plugins.debug'
+  require 'kickstart.plugins.debug'
   -- require 'kickstart.plugins.indent_line'
-  -- require 'kickstart.plugins.lint'
+  require 'kickstart.plugins.lint'
   -- require 'kickstart.plugins.autopairs'
   -- require 'kickstart.plugins.neo-tree'
-  -- require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
+  require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- require 'custom.plugins'
+  require 'custom.plugins'
 end
 
 -- The line beneath this is called `modeline`. See `:help modeline`
