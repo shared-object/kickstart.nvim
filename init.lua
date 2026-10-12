@@ -88,20 +88,26 @@ P.S. You can delete this when you're done too. It's your config now! :)
 -- SECTION 1: OPTIONS
 -- Core Neovim settings, leaders, options
 -- ============================================================
+--
+do
+end
+
 do
   -- Enable faster startup by caching compiled Lua modules
   vim.loader.enable()
 
-  vim.api.nvim_set_hl(0, 'Normal', { bg = 'none' })
-  vim.api.nvim_set_hl(0, 'NormalFloat', { bg = 'none' })
-  vim.api.nvim_set_hl(0, 'SignColumn', { bg = 'none' })
-  vim.api.nvim_set_hl(0, 'EndOfBuffer', { bg = 'none' })
-
+  -- vim.api.nvim_set_hl(0, 'Normal', { bg = 'none' })
+  -- vim.api.nvim_set_hl(0, 'NormalFloat', { bg = 'none' })
+  -- vim.api.nvim_set_hl(0, 'SignColumn', { bg = 'none' })
+  -- vim.api.nvim_set_hl(0, 'EndOfBuffer', { bg = 'none' })
+  --
   -- Set <space> as the leader key
   -- See `:help mapleader`
   --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
   vim.g.mapleader = ' '
   vim.g.maplocalleader = ' '
+
+  vim.o.winborder = 'rounded'
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
   vim.g.have_nerd_font = true
@@ -143,7 +149,7 @@ do
   vim.o.signcolumn = 'yes'
 
   -- Decrease update time
-  vim.o.updatetime = 250
+  vim.o.updatetime = 100
 
   -- Decrease mapped sequence wait time
   vim.o.timeoutlen = 300
@@ -350,7 +356,9 @@ do
   -- We first install it from https://github.com/NMAC427/guess-indent.nvim
   -- and then call its `setup()` function to start it with default settings.
   vim.pack.add { gh 'NMAC427/guess-indent.nvim' }
-  require('guess-indent').setup {}
+  require('guess-indent').setup {
+    filetype_exclude = { 'c', 'cpp', 'h' },
+  }
 
   -- Here is a more advanced configuration example that passes options to `gitsigns.nvim`
   --
@@ -373,7 +381,7 @@ do
     -- Delay between pressing a key and opening which-key (milliseconds)
     delay = 0,
     icons = { mappings = vim.g.have_nerd_font },
-    border = 'rounded',
+    win = { border = 'rounded' },
     wo = {
       winblend = 0,
     },
@@ -392,28 +400,211 @@ do
   -- change the command under that to load whatever the name of that colorscheme is.
   --
   -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
+  vim.pack.add { gh 'ellisonleao/gruvbox.nvim' }
   vim.pack.add { gh 'folke/tokyonight.nvim' }
-  ---@diagnostic disable-next-line: missing-fields
-  require('tokyonight').setup {
-    styles = {
-      comments = { italic = false }, -- Disable italics in comments
-      floats = 'transparent', -- Force floats to follow global transparency
-      sidebars = 'transparent',
-    },
-    on_highlights = function(hl, c)
-      hl.FloatBorder = { fg = c.blue, bg = 'none' }
-      hl.WhichKeyBorder = { fg = c.blue, bg = 'none' }
-      hl.FloatTitle = { fg = c.cyan, bg = 'none' }
-      hl.WhichKeyTitle = { fg = c.cyan, bg = 'none' }
-    end,
-    transparent = true,
+
+  local colorscheme_state = vim.fn.stdpath 'state' .. '/colorscheme'
+  local transparent_state = vim.fn.stdpath 'state' .. '/transparency'
+
+  -- Function to read the saved state
+  local function read_state(state_file)
+    local f = io.open(state_file, 'r')
+    if not f then return false end -- default to false if no file exists
+    local content = f:read '*all'
+    f:close()
+    return vim.trim(content)
+  end
+
+  -- Function to write the current state
+  local function write_state(state_file, state)
+    local f = io.open(state_file, 'w')
+    if f then
+      f:write(tostring(state))
+      f:close()
+    end
+  end
+
+  local transparent = read_state(transparent_state) == 'true'
+
+  local function osc(seq) vim.api.nvim_chan_send(vim.v.stderr, '\027]' .. seq .. '\027\\') end
+
+  local function sync_terminal_bg()
+    local hl = vim.api.nvim_get_hl(0, { name = 'Normal', link = false })
+    if hl.bg then
+      local r = bit.rshift(hl.bg, 16) % 256
+      local g = bit.rshift(hl.bg, 8) % 256
+      local b = hl.bg % 256
+      osc(string.format('11;rgba:%02x/%02x/%02x/ff', r, g, b)) -- opaque padding
+    else
+      osc '111' -- transparent: back to foot.ini color + alpha
+    end
+  end
+  -- register this AFTER the autocmd that clears bg for transparency,
+  -- so it sees the final Normal highlight
+  vim.api.nvim_create_autocmd({ 'ColorScheme', 'VimResume' }, {
+    callback = sync_terminal_bg,
+  })
+
+  vim.api.nvim_create_autocmd({ 'VimLeave', 'VimSuspend' }, {
+    callback = function() osc '111' end,
+  })
+
+  sync_terminal_bg()
+
+  local clear_groups = {
+    'Normal',
+    'NormalNC',
+    'NormalFloat',
+    'FloatBorder',
+    'SignColumn',
+    'EndOfBuffer',
+    'TelescopeNormal',
+    'TelescopeBorder',
+    'TelescopePromptNormal',
+    'TelescopePromptBorder',
+    'TelescopePromptTitle',
+    'TelescopeResultsNormal',
+    'TelescopeResultsBorder',
+    'TelescopeResultsTitle',
+    'TelescopePreviewNormal',
+    'TelescopePreviewBorder',
+    'TelescopePreviewTitle',
+    'WhichKey',
+    'WhichKeyNormal',
+    'WhichKeyGroup',
+    'WhichKeyDesc',
+    'WhichKeySeparator',
+    'WhichKeyFloat',
+    'WhichKeyBorder',
+    'WhichKeyValue',
   }
 
+  -- настройки плагинов зависят от флага
+  local BG = '#161616'
+
+  local function clear_transparent_backgrounds()
+    if not transparent then return end
+
+    for _, group in ipairs(clear_groups) do
+      local hl = vim.api.nvim_get_hl(0, {
+        name = group,
+        link = false,
+      })
+
+      hl.bg = nil
+      hl.ctermbg = nil
+
+      vim.api.nvim_set_hl(0, group, hl)
+    end
+  end
+
+  local function configure()
+    local float_style = transparent and 'transparent' or 'dark'
+
+    local ok_tn, tokyonight = pcall(require, 'tokyonight')
+    if ok_tn then
+      tokyonight.setup {
+        transparent = transparent,
+        styles = {
+          comments = { italic = false },
+          floats = float_style,
+          sidebars = float_style,
+        },
+        on_colors = function(c)
+          c.bg = BG
+          c.bg_dark = BG
+          c.bg_float = BG
+          c.bg_sidebar = BG
+        end,
+        on_highlights = function(hl, c)
+          local bg = transparent and 'none' or BG
+          -- Floating windows
+          hl.NormalFloat = { fg = c.fg, bg = bg }
+          hl.FloatBorder = { fg = c.blue, bg = bg }
+          hl.FloatTitle = { fg = c.cyan, bg = bg }
+
+          -- Completion
+          hl.CmpBorder = { fg = c.blue, bg = bg }
+
+          -- WhichKey
+          hl.WhichKeyBorder = { fg = c.blue, bg = bg }
+          hl.WhichKeyTitle = { fg = c.cyan, bg = bg }
+        end,
+      }
+    end
+
+    local ok_gb, gruvbox = pcall(require, 'gruvbox')
+    if ok_gb then
+      gruvbox.setup {
+        transparent_mode = transparent,
+        italic = { comments = false },
+        contrast = '', -- must be empty, otherwise dark0_hard/soft is used instead of dark0
+        palette_overrides = {
+          dark0 = BG,
+        },
+        overrides = transparent and {} or {
+          NormalFloat = { bg = BG },
+          SignColumn = { bg = BG },
+        },
+      }
+    end
+  end
+
+  -- после ЛЮБОЙ смены colorscheme дочищаем bg (colorscheme тут не вызываем, рекурсии нет)
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    callback = function()
+      clear_transparent_backgrounds()
+
+      write_state(colorscheme_state, vim.g.colors_name)
+      -- if not transparent then return end
+      -- for _, g in ipairs(clear_groups) do
+      --   local hl = vim.api.nvim_get_hl(0, { name = g, link = false })
+      --   hl.bg = nil
+      --   hl.ctermbg = nil
+      --   vim.api.nvim_set_hl(0, g, hl)
+      -- end
+    end,
+  })
+
+  local function toggle_transparency()
+    transparent = not transparent
+    write_state(transparent_state, transparent)
+    configure()
+    clear_transparent_backgrounds()
+
+    vim.cmd.colorscheme(vim.g.colors_name)
+    print('transparency: ' .. tostring(transparent))
+  end
+
+  vim.api.nvim_create_user_command('ToggleTransparency', toggle_transparency, {})
+  vim.keymap.set('n', '<leader>tt', toggle_transparency, { desc = 'Toggle transparency' })
+
+  configure()
+  -- затем загружай тему как обычно: vim.cmd.colorscheme 'gruvbox' (или tokyonight-night)
+  ---@diagnostic disable-next-line: missing-fields
+  -- require('tokyonight').setup {
+  --   styles = {
+  --     comments = { italic = false }, -- Disable italics in comments
+  --     floats = 'transparent', -- Force floats to follow global transparency
+  --     sidebars = 'transparent',
+  --   },
+  --   on_highlights = function(hl, c)
+  --     hl.FloatBorder = { fg = c.blue, bg = 'none' }
+  --     hl.WhichKeyBorder = { fg = c.blue, bg = 'none' }
+  --     hl.FloatTitle = { fg = c.cyan, bg = 'none' }
+  --     hl.WhichKeyTitle = { fg = c.cyan, bg = 'none' }
+  --   end,
+  --   transparent = true,
+  -- }
+  --
   -- Load the colorscheme here.
   -- Like many other themes, this one has different styles, and you could load
   -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
   -- vim.cmd.colorscheme 'tokyonight-night'
-  vim.cmd.colorscheme 'tokyonight'
+
+  local colorscheme = read_state(colorscheme_state)
+  if not colorscheme then colorscheme = 'tokyonight' end
+  vim.cmd.colorscheme(colorscheme)
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
@@ -508,40 +699,40 @@ do
 
   -- NOTE: You can install multiple plugins at once
   vim.pack.add(telescope_plugins)
-  vim.api.nvim_create_autocmd('ColorScheme', {
-    callback = function()
-      local groups = {
-        'Normal',
-        'NormalFloat',
-        'FloatBorder',
-        'TelescopeNormal',
-        'TelescopeBorder',
-        'TelescopePromptNormal',
-        'TelescopePromptBorder',
-        'TelescopePromptTitle',
-        'TelescopeResultsNormal',
-        'TelescopeResultsBorder',
-        'TelescopeResultsTitle',
-        'TelescopePreviewNormal',
-        'TelescopePreviewBorder',
-        'TelescopePreviewTitle',
-        'TelescopeSelection',
-        'TelescopeMatching',
-        'WhichKey',
-        'WhichKeyGroup',
-        'WhichKeyDesc',
-        'WhichKeySeparator',
-        'WhichKeyFloat',
-        'WhichKeyBorder',
-        'WhichKeyValue',
-      }
-      for _, g in ipairs(groups) do
-        vim.api.nvim_set_hl(0, g, { bg = 'NONE' })
-      end
-    end,
-  })
-
-  vim.cmd 'doautocmd ColorScheme'
+  -- vim.api.nvim_create_autocmd('ColorScheme', {
+  --   callback = function()
+  --     local groups = {
+  --       'Normal',
+  --       'NormalFloat',
+  --       'FloatBorder',
+  --       'TelescopeNormal',
+  --       'TelescopeBorder',
+  --       'TelescopePromptNormal',
+  --       'TelescopePromptBorder',
+  --       'TelescopePromptTitle',
+  --       'TelescopeResultsNormal',
+  --       'TelescopeResultsBorder',
+  --       'TelescopeResultsTitle',
+  --       'TelescopePreviewNormal',
+  --       'TelescopePreviewBorder',
+  --       'TelescopePreviewTitle',
+  --       'TelescopeSelection',
+  --       'TelescopeMatching',
+  --       'WhichKey',
+  --       'WhichKeyGroup',
+  --       'WhichKeyDesc',
+  --       'WhichKeySeparator',
+  --       'WhichKeyFloat',
+  --       'WhichKeyBorder',
+  --       'WhichKeyValue',
+  --     }
+  --     for _, g in ipairs(groups) do
+  --       vim.api.nvim_set_hl(0, g, { bg = 'NONE' })
+  --     end
+  --   end,
+  -- })
+  --
+  -- vim.cmd 'doautocmd ColorScheme'
   -- See `:help telescope` and `:help telescope.setup()`
   require('telescope').setup {
     -- You can put your default mappings / updates / etc. in here
@@ -748,24 +939,25 @@ do
     clangd = {},
     gopls = {},
     zls = {},
-    pyrefly = {},
-    -- pyright = {
-    --   before_init = function(_, config)
-    --     local cwd = vim.fn.getcwd()
-    --
-    --     local default_venv = cwd .. '/.venv/bin/python'
-    --     if vim.fn.executable(default_venv) == 1 then
-    --       config.settings.python.pythonPath = default_venv
-    --       return
-    --     end
-    --
-    --     if vim.env.VIRTUAL_ENV then config.settings.python.pythonPath = vim.env.VIRTUAL_ENV .. '/bin/python' end
-    --   end,
-    --   settings = {
-    --     ---@type table<string, any>
-    --     python = {},
-    --   },
-    -- },
+    -- pyrefly = {},
+    ols = {},
+    pyright = {
+      before_init = function(_, config)
+        local cwd = vim.fn.getcwd()
+
+        local default_venv = cwd .. '/.venv/bin/python'
+        if vim.fn.executable(default_venv) == 1 then
+          config.settings.python.pythonPath = default_venv
+          return
+        end
+
+        if vim.env.VIRTUAL_ENV then config.settings.python.pythonPath = vim.env.VIRTUAL_ENV .. '/bin/python' end
+      end,
+      settings = {
+        ---@type table<string, any>
+        python = {},
+      },
+    },
     rust_analyzer = {},
     --
     -- Some languages (like typescript) have entire language plugins that can be useful:
@@ -1059,7 +1251,7 @@ do
   require 'kickstart.plugins.debug'
   -- require 'kickstart.plugins.indent_line'
   require 'kickstart.plugins.lint'
-  -- require 'kickstart.plugins.autopairs'
+  require 'kickstart.plugins.autopairs'
   -- require 'kickstart.plugins.neo-tree'
   require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
