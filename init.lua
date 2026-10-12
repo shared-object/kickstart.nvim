@@ -107,8 +107,6 @@ do
   vim.g.mapleader = ' '
   vim.g.maplocalleader = ' '
 
-  vim.o.winborder = 'rounded'
-
   -- Set to true if you have a Nerd Font installed and selected in the terminal
   vim.g.have_nerd_font = true
 
@@ -331,7 +329,7 @@ do
   })
 end
 
----Because most plugins are hosted on GitHub, you can use the helper
+---Because most plugins are hostHub, you can use the helper
 ---function to have less repetition in the following sections.
 ---@param repo string
 ---@return string
@@ -425,6 +423,7 @@ do
   end
 
   local transparent = read_state(transparent_state) == 'true'
+  vim.g.transparent = transparent
 
   local function osc(seq) vim.api.nvim_chan_send(vim.v.stderr, '\027]' .. seq .. '\027\\') end
 
@@ -477,10 +476,27 @@ do
     'WhichKeyFloat',
     'WhichKeyBorder',
     'WhichKeyValue',
+    'Pmenu',
+    'PmenuSel',
+    'PmenuSbar',
+    'PmenuThumb',
+    'CmpNormal',
+    'CmpPmenu',
+    'CmpSel',
+    'CmpBorder',
+    'Normal',
+    'BlinkCmpMenu',
+    'BlinkCmpMenuBorder',
+    'BlinkCmpDoc',
+    'BlinkCmpDocBorder',
+    'BlinkCmpSignatureHelp',
+    'BlinkCmpSignatureHelpBorder',
   }
 
   -- настройки плагинов зависят от флага
   local BG = '#161616'
+
+  local function is_custom_scheme(name) return name == 'gruvbox' or name:match '^tokyonight' end
 
   local function clear_transparent_backgrounds()
     if not transparent then return end
@@ -570,29 +586,160 @@ do
     end
   end
 
-  -- после ЛЮБОЙ смены colorscheme дочищаем bg (colorscheme тут не вызываем, рекурсии нет)
+  local function fix_whichkey_highlights()
+    local normal = vim.api.nvim_get_hl(0, {
+      name = 'Normal',
+      link = false,
+    })
+
+    local border = vim.api.nvim_get_hl(0, {
+      name = 'FloatBorder',
+      link = false,
+    })
+
+    local title = vim.api.nvim_get_hl(0, {
+      name = 'Title',
+      link = false,
+    })
+
+    local bg = transparent and 'none' or BG
+
+    for _, group in ipairs {
+      'WhichKey',
+      'WhichKeyNormal',
+      'WhichKeyFloat',
+      'WhichKeyGroup',
+      'WhichKeyDesc',
+      'WhichKeySeparator',
+      'WhichKeyValue',
+      'WhichKeyIcon',
+      'WhichKeyTitle',
+      'WhichKeyCounter',
+    } do
+      local hl = vim.api.nvim_get_hl(0, {
+        name = group,
+        link = false,
+      })
+
+      hl.fg = hl.fg or normal.fg
+      hl.bg = bg
+
+      vim.api.nvim_set_hl(0, group, hl)
+    end
+
+    vim.api.nvim_set_hl(0, 'WhichKeyBorder', {
+      fg = border.fg or normal.fg,
+      bg = bg,
+    })
+
+    vim.api.nvim_set_hl(0, 'WhichKeyTitle', {
+      fg = title.fg or normal.fg,
+      bg = bg,
+    })
+  end
+
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    callback = function() vim.schedule(fix_whichkey_highlights) end,
+  })
+
+  fix_whichkey_highlights()
+
+  local function fix_blink_highlights()
+    local border = vim.api.nvim_get_hl(0, {
+      name = 'FloatBorder',
+      link = false,
+    })
+
+    local visual = vim.api.nvim_get_hl(0, {
+      name = 'Visual',
+      link = false,
+    })
+
+    local bg = transparent and 'NONE' or BG
+
+    -- Background of the completion menu
+    vim.api.nvim_set_hl(0, 'BlinkCmpMenu', {
+      bg = bg,
+    })
+
+    -- Border around the completion menu
+    vim.api.nvim_set_hl(0, 'BlinkCmpMenuBorder', {
+      fg = border.fg,
+      bg = bg,
+    })
+
+    -- Selected completion item
+    vim.api.nvim_set_hl(0, 'BlinkCmpMenuSelection', {
+      fg = visual.fg,
+      bg = visual.bg,
+      bold = visual.bold,
+      reverse = visual.reverse,
+    })
+  end
+
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    callback = function() vim.schedule(fix_blink_highlights) end,
+  })
+
+  fix_blink_highlights()
+
+  local function apply_transparency()
+    if not transparent or not is_custom_scheme(vim.g.colors_name or '') then return end
+
+    if transparent then
+      vim.o.winborder = 'rounded'
+    else
+      vim.o.winborder = ''
+    end
+
+    clear_transparent_backgrounds()
+
+    for _, group in ipairs(clear_groups) do
+      local hl = vim.api.nvim_get_hl(0, {
+        name = group,
+        link = false,
+      })
+
+      hl.bg = nil
+      hl.ctermbg = nil
+
+      vim.api.nvim_set_hl(0, group, hl)
+    end
+  end
+
   vim.api.nvim_create_autocmd('ColorScheme', {
     callback = function()
-      clear_transparent_backgrounds()
+      local scheme = vim.g.colors_name or ''
+      write_state(colorscheme_state, scheme)
 
-      write_state(colorscheme_state, vim.g.colors_name)
-      -- if not transparent then return end
-      -- for _, g in ipairs(clear_groups) do
-      --   local hl = vim.api.nvim_get_hl(0, { name = g, link = false })
-      --   hl.bg = nil
-      --   hl.ctermbg = nil
-      --   vim.api.nvim_set_hl(0, g, hl)
-      -- end
+      if is_custom_scheme(scheme) then
+        configure()
+        apply_transparency()
+      end
+
+      vim.schedule(function()
+        sync_terminal_bg()
+        apply_transparency()
+      end)
     end,
   })
 
   local function toggle_transparency()
-    transparent = not transparent
-    write_state(transparent_state, transparent)
-    configure()
-    clear_transparent_backgrounds()
+    local scheme = vim.g.colors_name or ''
 
-    vim.cmd.colorscheme(vim.g.colors_name)
+    if not is_custom_scheme(scheme) then
+      vim.notify('Transparency toggle works only with Gruvbox and TokyoNight', vim.log.levels.WARN)
+      return
+    end
+
+    transparent = not transparent
+
+    vim.g.transparent = transparent
+    write_state(transparent_state, transparent)
+
+    configure()
+    vim.cmd.colorscheme(scheme)
+
     print('transparency: ' .. tostring(transparent))
   end
 
