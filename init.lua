@@ -542,9 +542,29 @@ do
         palette_overrides = {
           dark0 = BG,
         },
-        overrides = transparent and {} or {
+        overrides = transparent and {
+          NormalFloat = { bg = 'none' },
+          Pmenu = { bg = 'none' },
+          PmenuSel = { bg = 'none' },
+          PmenuSbar = { bg = 'none' },
+          PmenuThumb = { bg = 'none' },
+
+          CmpNormal = { bg = 'none' },
+          CmpBorder = { bg = 'none' },
+          CmpPmenu = { bg = 'none' },
+          CmpSel = { bg = 'none' },
+        } or {
           NormalFloat = { bg = BG },
           SignColumn = { bg = BG },
+          Pmenu = { bg = BG },
+          PmenuSel = { bg = BG },
+          PmenuSbar = { bg = BG },
+          PmenuThumb = { bg = BG },
+
+          CmpNormal = { bg = BG },
+          CmpBorder = { bg = BG },
+          CmpPmenu = { bg = BG },
+          CmpSel = { bg = BG },
         },
       }
     end
